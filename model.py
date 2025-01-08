@@ -263,7 +263,7 @@ class UAV:
         other_original_position = other.position.copy()
         other_original_velocity = other.velocity.copy()
 
-        for h in range(1, H + 1):
+        for h in range(0, H):
             self.update_velocity()
             self.update_position()
             other.update_velocity()
@@ -587,7 +587,7 @@ class UAVSwarm:
                         self.uavs[i].current_sinr(self.uavs[j])
                         >= self.signal_config.sinr_threshold
                     ):
-                        W[i, j] = self.uavs[i].link_efficiency(self.uavs[j])
+                        W[i, j] = self.uavs[i].future_link_efficiency(self.uavs[j])
                     else:
                         W[i, j] = 0
 
@@ -690,6 +690,67 @@ class UAVSwarm:
             for j in range(self.max_swarm_num)
         ]
 
+        results = self.uav_clusters.copy()
+        while any(len(cluster.members) > self.max_uav_num for cluster in results):
+            new_results = []
+            for cluster in results:
+                if len(cluster.members) > self.max_uav_num:
+                    K_prime = int(np.ceil(len(cluster.members) / self.max_uav_num))
+                    positions = np.array([uav.position for uav in cluster.members])
+                    gmm = GaussianMixture(n_components=K_prime)
+                    sub_labels = gmm.fit_predict(positions)
+                    sub_clusters = [
+                        UAVCluster(
+                            self.select_cluster_head(
+                                [
+                                    cluster.members[i]
+                                    for i in range(len(cluster.members))
+                                    if sub_labels[i] == j
+                                ]
+                            ),
+                            [
+                                cluster.members[i]
+                                for i in range(len(cluster.members))
+                                if sub_labels[i] == j
+                            ],
+                        )
+                        for j in range(K_prime)
+                    ]
+                    new_results.extend(sub_clusters)
+                else:
+                    new_results.append(cluster)
+            results = new_results
+
+        final_results = []
+        for cluster in results:
+            while not any(self.select_cluster_head([uav]) for uav in cluster.members):
+                K_prime = 2
+                positions = np.array([uav.position for uav in cluster.members])
+                gmm = GaussianMixture(n_components=K_prime)
+                sub_labels = gmm.fit_predict(positions)
+                sub_clusters = [
+                    UAVCluster(
+                        self.select_cluster_head(
+                            [
+                                cluster.members[i]
+                                for i in range(len(cluster.members))
+                                if sub_labels[i] == j
+                            ]
+                        ),
+                        [
+                            cluster.members[i]
+                            for i in range(len(cluster.members))
+                            if sub_labels[i] == j
+                        ],
+                    )
+                    for j in range(K_prime)
+                ]
+                results.remove(cluster)
+                results.extend(sub_clusters)
+            final_results.append(cluster)
+
+        self.uav_clusters = final_results
+
     def affinity_propagation(self):
         N = len(self.uavs)
         positions = np.array([uav.position for uav in self.uavs])
@@ -762,7 +823,6 @@ class UAVSwarm:
 
     def reset_clusters(self):
         self.uav_clusters = []
-
         self.call_method()
 
         self.threshold_throughput = self.throughput * 0.5
@@ -779,7 +839,8 @@ class UAVSwarm:
 
     @property
     def average_throughtput(self) -> float:
-        return self.throughput / self.uav_num
+        # return self.throughput / self.uav_num
+        return self.throughput / self.cluster_numbers
 
     @property
     def cluster_numbers(self) -> int:
@@ -833,7 +894,7 @@ class UAVSwarm:
 if __name__ == "__main__":
     position_bound = (np.array([0, 0, 100]), np.array([2000, 2000, 150]))
     uav_num = 2
-    max_uav_num = 20
+    velocity = 20
     velocity_mean = 20
     velocity_std = 5
     velocity_bound = (10, 30)
@@ -858,7 +919,7 @@ if __name__ == "__main__":
 
     uav_swarm = UAVSwarm(
         uav_num,
-        max_uav_num,
+        velocity,
         position_bound,
         velocity_mean,
         velocity_std,
@@ -873,17 +934,17 @@ if __name__ == "__main__":
         method: {"average_throughput": [], "cluster_numbers": []} for method in methods
     }
 
-    for method in methods:
-        uav_swarm.method = method
+    for velocity in methods:
+        uav_swarm.method = velocity
         uav_swarm.reset()
         for _ in tqdm(
-            range(0, simulation_time, delta_t), desc=f"Simulation Progress ({method})"
+            range(0, simulation_time, delta_t), desc=f"Simulation Progress ({velocity})"
         ):
             uav_swarm.update()
-            results[method]["average_throughput"].append(
+            results[velocity]["average_throughput"].append(
                 uav_swarm.average_throughtput / 1e6
             )
-            results[method]["cluster_numbers"].append(uav_swarm.cluster_numbers)
+            results[velocity]["cluster_numbers"].append(uav_swarm.cluster_numbers)
             for cl in uav_swarm.uav_clusters:
                 cl.display()
                 print()

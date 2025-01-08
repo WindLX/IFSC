@@ -9,7 +9,7 @@ from model import *
 if __name__ == "__main__":
     position_bound = (np.array([0, 0, 100]), np.array([2000, 2000, 150]))
     uav_num = 100
-    max_uav_num = 15
+    velocity = 15
     velocity_mean = 20
     velocity_std = 5
     velocity_bound = (10, 30)
@@ -28,20 +28,20 @@ if __name__ == "__main__":
         transmitter_consumption=50e-9,
         packet_length=1,
         adjustable_factor=0.5,
-        prediction_horizon=5,
-        discount_factor=0.5,
+        prediction_horizon=1,
+        discount_factor=0.1,
     )
 
     uav_swarm = UAVSwarm(
         uav_num,
-        max_uav_num,
+        velocity,
         position_bound,
         velocity_mean,
         velocity_std,
         velocity_bound,
         delta_t,
         signal_config,
-        seed,
+        seed=seed,
     )
 
     methods = ["IFSC", "FSC", "GMM"]
@@ -49,18 +49,18 @@ if __name__ == "__main__":
         method: {"average_throughput": [], "cluster_numbers": []} for method in methods
     }
 
-    for method in methods:
-        uav_swarm.method = method
+    for velocity in methods:
+        uav_swarm.method = velocity
         uav_swarm.reset()
         for _ in tqdm(
-            range(0, simulation_time, delta_t), desc=f"Simulation Progress ({method})"
+            range(0, simulation_time, delta_t), desc=f"Simulation Progress ({velocity})"
         ):
             uav_swarm.update()
-            results[method]["average_throughput"].append(
+            results[velocity]["average_throughput"].append(
                 uav_swarm.average_throughtput / 1e6
             )
 
-            results[method]["cluster_numbers"].append(uav_swarm.cluster_numbers)
+            results[velocity]["cluster_numbers"].append(uav_swarm.cluster_numbers)
 
     df_throughput = pd.DataFrame(
         {method: results[method]["average_throughput"] for method in methods}
@@ -73,21 +73,23 @@ if __name__ == "__main__":
     df_clusters["time"] = range(0, simulation_time, delta_t)
 
     plt.figure(figsize=(12, 6))
-    for method in methods:
-        sns.lineplot(x="time", y=method, data=df_throughput, label=method)
+    for velocity in methods:
+        sns.lineplot(x="time", y=velocity, data=df_throughput, label=velocity)
     plt.title("Average Throughput Over Time")
     plt.xlabel("Time (s)")
-    plt.ylabel("Average Throughput (M)")
+    plt.ylabel("Average Throughput (Mbit)")
     plt.grid(True)
     plt.legend()
+    plt.savefig("image/throughput_time_method.png")
     plt.show()
 
     plt.figure(figsize=(12, 6))
-    for method in methods:
-        sns.lineplot(x="time", y=method, data=df_clusters, label=method)
+    for velocity in methods:
+        sns.lineplot(x="time", y=velocity, data=df_clusters, label=velocity)
     plt.title("Cluster Numbers Over Time")
     plt.xlabel("Time (s)")
     plt.ylabel("Cluster Numbers")
     plt.grid(True)
     plt.legend()
+    plt.savefig("image/cluster_number_uav_num_method.png")
     plt.show()

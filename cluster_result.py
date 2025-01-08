@@ -10,33 +10,33 @@ from model import *
 def plot_clusters(uav_swarm, title):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
-    print(uav_swarm.uav_clusters)
     for cluster_id, cluster in enumerate(uav_swarm.uav_clusters):
-        positions = np.array([uav_swarm.positions[uav_id] for uav_id in cluster])
+        positions = np.array([uav.position for uav in cluster.members])
         ax.scatter(
             positions[:, 0],
             positions[:, 1],
             positions[:, 2],
             label=f"Cluster {cluster_id}",
         )
-        cluster_head = uav_swarm.positions[uav_swarm.cluster_heads[cluster_id]]
+        cluster_head = cluster.ch.position
         ax.scatter(
             cluster_head[0],
             cluster_head[1],
             cluster_head[2],
             marker="*",
             s=200,
-            c="red",
+            c=ax._get_lines.get_next_color(),
         )
     ax.set_title(title)
     ax.legend()
+    plt.savefig(f"image/{title}.png")
     plt.show()
 
 
 if __name__ == "__main__":
     position_bound = (np.array([0, 0, 100]), np.array([2000, 2000, 150]))
     uav_num = 100
-    max_uav_num = 15
+    velocity = 15
     velocity_mean = 20
     velocity_std = 5
     velocity_bound = (10, 30)
@@ -55,20 +55,20 @@ if __name__ == "__main__":
         transmitter_consumption=50e-9,
         packet_length=1,
         adjustable_factor=0.5,
-        prediction_horizon=5,
-        discount_factor=0.5,
+        prediction_horizon=1,
+        discount_factor=0.1,
     )
 
     uav_swarm = UAVSwarm(
         uav_num,
-        max_uav_num,
+        velocity,
         position_bound,
         velocity_mean,
         velocity_std,
         velocity_bound,
         delta_t,
         signal_config,
-        seed,
+        seed=seed,
     )
 
     uav_swarm.reset()
@@ -80,9 +80,10 @@ if __name__ == "__main__":
         uav_swarm.positions[:, 2],
     )
     ax.set_title("Initial UAV Positions")
+    plt.savefig("image/initial_uav_positions.png")
     plt.show()
 
-    for max_uav_num in [15, 20, 25]:
-        uav_swarm.max_uav_num = max_uav_num
+    for velocity in [15, 20, 25]:
+        uav_swarm.max_uav_num = velocity
         uav_swarm.reset()
-        plot_clusters(uav_swarm, f"UAV Clusters (max_uav_num={max_uav_num})")
+        plot_clusters(uav_swarm, f"UAV Clusters (max_uav_num={velocity})")
